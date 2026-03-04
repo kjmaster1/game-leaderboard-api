@@ -56,17 +56,6 @@ def get_me(current_player: Player = Depends(get_current_player)):
     return current_player
 
 
-@router.get("/{player_id}", response_model=PlayerPublic)
-def get_player(player_id: str, db: Session = Depends(get_db)):
-    player = db.query(Player).filter(Player.id == player_id).first()
-    if not player:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Player not found"
-        )
-    return player
-
-
 @router.post("/make-admin/{player_id}", response_model=PlayerResponse)
 def make_admin(
         player_id: str,
@@ -117,3 +106,13 @@ def get_player_matches(
         .all()
     )
     return matches
+
+@router.get("/{player_id}", response_model=PlayerPublic)
+def get_player(player_id: str, db: Session = Depends(get_db)):
+    player = db.query(Player).filter(Player.id == player_id).first()
+    if not player:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Player not found"
+        )
+    return player
