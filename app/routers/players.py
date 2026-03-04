@@ -53,3 +53,27 @@ def get_player(player_id: str, db: Session = Depends(get_db)):
             detail="Player not found"
         )
     return player
+
+@router.post("/make-admin/{player_id}", response_model=PlayerResponse)
+def make_admin(
+    player_id: str,
+    db: Session = Depends(get_db),
+    current_player: Player = Depends(get_current_player)
+):
+    # Only allow if there are no admins yet, or if requester is already admin
+    admin_exists = db.query(Player).filter(Player.is_admin == True).first()
+    if admin_exists and not current_player.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    player = db.query(Player).filter(Player.id == player_id).first()
+    if not player:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Player not found"
+        )
+    player.is_admin = True
+    db.commit()
+    db.refresh(player)
+    return player
