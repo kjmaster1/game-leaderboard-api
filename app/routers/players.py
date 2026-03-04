@@ -4,6 +4,9 @@ from app.database import get_db
 from app.models.player import Player
 from app.schemas.player import PlayerRegister, PlayerLogin, PlayerResponse, PlayerPublic, Token
 from app.auth import hash_password, verify_password, create_access_token, get_current_player
+from app.models.match import Match, MatchPlayer
+from app.schemas.match import MatchResponse
+from typing import List
 
 router = APIRouter(prefix="/players", tags=["Players"])
 
@@ -77,3 +80,29 @@ def make_admin(
     db.commit()
     db.refresh(player)
     return player
+
+@router.get("/{player_id}/matches", response_model=List[MatchResponse])
+def get_player_matches(
+    player_id: str,
+    limit: int = 20,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    current_player: Player = Depends(get_current_player)
+):
+    player = db.query(Player).filter(Player.id == player_id).first()
+    if not player:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Player not found"
+        )
+
+    matches = (
+        db.query(Match)
+        .join(Match.match_players)
+        .filter(MatchPlayer.player_id == player_id)
+        .order_by(Match.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return matches
