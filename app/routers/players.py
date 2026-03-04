@@ -1,17 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models.player import Player
-from app.schemas.player import PlayerRegister, PlayerLogin, PlayerResponse, PlayerPublic, Token
-from app.auth import hash_password, verify_password, create_access_token, get_current_player
-from app.models.match import Match, MatchPlayer
-from app.schemas.match import MatchResponse
 from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from sqlalchemy.orm import Session
+
+from app.auth import hash_password, verify_password, create_access_token, get_current_player
+from app.database import get_db
+from app.limiter import limiter
+from app.models.match import Match, MatchPlayer
+from app.models.player import Player
+from app.schemas.match import MatchResponse
+from app.schemas.player import PlayerRegister, PlayerLogin, PlayerResponse, PlayerPublic, Token
 
 router = APIRouter(prefix="/players", tags=["Players"])
 
+
 @router.post("/register", response_model=PlayerResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: PlayerRegister, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register(request: Request, payload: PlayerRegister, db: Session = Depends(get_db)):
     existing = db.query(Player).filter(
         (Player.username == payload.username) | (Player.email == payload.email)
     ).first()
@@ -31,8 +36,10 @@ def register(payload: PlayerRegister, db: Session = Depends(get_db)):
     db.refresh(player)
     return player
 
+
 @router.post("/login", response_model=Token)
-def login(payload: PlayerLogin, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, payload: PlayerLogin, db: Session = Depends(get_db)):
     player = db.query(Player).filter(Player.username == payload.username).first()
     if not player or not verify_password(payload.password, player.hashed_password):
         raise HTTPException(
@@ -43,9 +50,11 @@ def login(payload: PlayerLogin, db: Session = Depends(get_db)):
     token = create_access_token(data={"sub": player.id})
     return {"access_token": token, "token_type": "bearer"}
 
+
 @router.get("/me", response_model=PlayerResponse)
 def get_me(current_player: Player = Depends(get_current_player)):
     return current_player
+
 
 @router.get("/{player_id}", response_model=PlayerPublic)
 def get_player(player_id: str, db: Session = Depends(get_db)):
@@ -57,11 +66,12 @@ def get_player(player_id: str, db: Session = Depends(get_db)):
         )
     return player
 
+
 @router.post("/make-admin/{player_id}", response_model=PlayerResponse)
 def make_admin(
-    player_id: str,
-    db: Session = Depends(get_db),
-    current_player: Player = Depends(get_current_player)
+        player_id: str,
+        db: Session = Depends(get_db),
+        current_player: Player = Depends(get_current_player)
 ):
     # Only allow if there are no admins yet, or if requester is already admin
     admin_exists = db.query(Player).filter(Player.is_admin == True).first()
@@ -81,13 +91,14 @@ def make_admin(
     db.refresh(player)
     return player
 
+
 @router.get("/{player_id}/matches", response_model=List[MatchResponse])
 def get_player_matches(
-    player_id: str,
-    limit: int = 20,
-    offset: int = 0,
-    db: Session = Depends(get_db),
-    current_player: Player = Depends(get_current_player)
+        player_id: str,
+        limit: int = 20,
+        offset: int = 0,
+        db: Session = Depends(get_db),
+        current_player: Player = Depends(get_current_player)
 ):
     player = db.query(Player).filter(Player.id == player_id).first()
     if not player:
